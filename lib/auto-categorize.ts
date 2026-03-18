@@ -638,7 +638,7 @@ export function autoCategorize(
     // Also try without type filter if no match found with filter
     if (!bestResult && type) {
       const unfiltered = findBestMatch(searchText)
-      if (unfiltered && (!bestResult || unfiltered.confidence > bestResult.confidence)) {
+      if (unfiltered) {
         bestResult = unfiltered
       }
     }

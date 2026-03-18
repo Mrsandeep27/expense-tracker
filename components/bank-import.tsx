@@ -72,6 +72,11 @@ interface ImportResults {
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const COUNTRY_FLAGS: Record<string, string> = {
+  India: "\u{1F1EE}\u{1F1F3}",
+  US: "\u{1F1FA}\u{1F1F8}",
+  USA: "\u{1F1FA}\u{1F1F8}",
+}
 const PREVIEW_LIMIT = 20
 
 // ─── Component ──────────────────────────────────────────────────
@@ -153,23 +158,21 @@ export function BankImport({ open, onOpenChange }: BankImportProps) {
       setError(null)
 
       try {
-        const format = detectBankFormat(content, fileName)
+        const format = detectBankFormat(content)
         setDetectedFormat(format)
 
-        const rawTransactions = parseBankStatement(content, format)
+        const parseResult = parseBankStatement(content, format)
 
-        if (!rawTransactions || rawTransactions.length === 0) {
-          setError("No transactions found in the file. Please check the format.")
+        if (!parseResult.success || parseResult.transactions.length === 0) {
+          setError(parseResult.error || "No transactions found in the file. Please check the format.")
           setParsing(false)
           return
         }
 
-        const processed: ParsedTransaction[] = rawTransactions.map(
-          (raw: { date: string; description: string; amount: number; type?: string }) => {
-            const type = raw.type
-              ? (raw.type as "expense" | "income")
-              : autoDetectType(raw.description, raw.amount)
-            const { category, confidence } = autoCategorize(raw.description, type, categories)
+        const processed: ParsedTransaction[] = parseResult.transactions.map(
+          (raw) => {
+            const type = raw.type === "credit" ? "income" as const : "expense" as const
+            const { category, confidence } = autoCategorize(raw.description, raw.amount, type)
             return {
               date: raw.date,
               description: raw.description,
@@ -509,7 +512,7 @@ export function BankImport({ open, onOpenChange }: BankImportProps) {
                         variant="secondary"
                         className="text-xs py-1 px-2.5"
                       >
-                        <span className="mr-1.5">{bank.flag}</span>
+                        <span className="mr-1.5">{COUNTRY_FLAGS[bank.country] ?? ""}</span>
                         {bank.name}
                       </Badge>
                     ))}
@@ -543,7 +546,7 @@ export function BankImport({ open, onOpenChange }: BankImportProps) {
                         <SelectContent>
                           {SUPPORTED_BANKS.map((bank) => (
                             <SelectItem key={bank.id} value={bank.id}>
-                              {bank.flag} {bank.name}
+                              {COUNTRY_FLAGS[bank.country] ?? ""} {bank.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
