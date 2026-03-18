@@ -1,268 +1,450 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { TrendingUp, TrendingDown, Calendar } from "lucide-react"
-import type { Expense } from "@/app/page"
+import { useMemo, useState } from "react"
+import { useApp } from "@/components/app-provider"
+import { CategoryIcon } from "@/components/category-icon"
 import { formatCurrency } from "@/utils/currency"
-import type { Currency } from "@/components/currency-setup"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
-interface MonthlyReportProps {
-  expenses: Expense[]
-  currency?: Currency
-}
+export function MonthlyReport() {
+  const { transactions, categories, budgets, settings } = useApp()
+  const currency = settings.currency
 
-export function MonthlyReport({ expenses, currency }: MonthlyReportProps) {
-  // Add default currency fallback
-  const defaultCurrency = currency || { code: "USD", symbol: "$", name: "US Dollar", locale: "en-US" }
-
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date()
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-  })
-
-  // Get available months from expenses
-  const availableMonths = Array.from(
-    new Set(
-      expenses.map((expense) => {
-        const date = new Date(expense.date)
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-      }),
-    ),
-  )
-    .sort()
-    .reverse()
-
-  // Add current month if not in expenses
-  if (!availableMonths.includes(selectedMonth)) {
-    availableMonths.unshift(selectedMonth)
-  }
-
-  // Filter expenses for selected month
-  const monthExpenses = expenses.filter((expense) => {
-    const expenseMonth = new Date(expense.date)
-    const expenseMonthStr = `${expenseMonth.getFullYear()}-${String(expenseMonth.getMonth() + 1).padStart(2, "0")}`
-    return expenseMonthStr === selectedMonth
-  })
-
-  // Calculate statistics
-  const totalAmount = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const averagePerDay = totalAmount / new Date(selectedMonth + "-01").getDate()
-  const transactionCount = monthExpenses.length
-
-  // Category breakdown
-  const categoryBreakdown = monthExpenses.reduce(
-    (acc, expense) => {
-      acc[expense.category] = (acc[expense.category] || 0) + expense.amount
-      return acc
-    },
-    {} as Record<string, number>,
-  )
-
-  const sortedCategories = Object.entries(categoryBreakdown).sort(([, a], [, b]) => b - a)
-
-  // Compare with previous month
-  const [year, month] = selectedMonth.split("-").map(Number)
-  const prevMonth = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`
-
-  const prevMonthExpenses = expenses.filter((expense) => {
-    const expenseMonth = new Date(expense.date)
-    const expenseMonthStr = `${expenseMonth.getFullYear()}-${String(expenseMonth.getMonth() + 1).padStart(2, "0")}`
-    return expenseMonthStr === prevMonth
-  })
-
-  const prevMonthTotal = prevMonthExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const monthlyChange = totalAmount - prevMonthTotal
-  const monthlyChangePercent = prevMonthTotal > 0 ? (monthlyChange / prevMonthTotal) * 100 : 0
-
-  const formatMonth = (monthStr: string) => {
-    const [year, month] = monthStr.split("-")
-    return new Date(Number.parseInt(year), Number.parseInt(month) - 1).toLocaleDateString("en-US", {
-      month: "long",
-      year: "numeric",
-    })
-  }
-
-  const getCategoryColor = (category: string) => {
-    const colors = {
-      "Food & Dining": "bg-orange-100 text-orange-800",
-      Transportation: "bg-blue-100 text-blue-800",
-      Shopping: "bg-purple-100 text-purple-800",
-      Entertainment: "bg-pink-100 text-pink-800",
-      "Bills & Utilities": "bg-red-100 text-red-800",
-      Healthcare: "bg-green-100 text-green-800",
-      Travel: "bg-indigo-100 text-indigo-800",
-      Education: "bg-yellow-100 text-yellow-800",
-      Other: "bg-gray-100 text-gray-800",
+  // ── Available months from transaction data ─────────────────
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>()
+    for (const tx of transactions) {
+      set.add(tx.date.slice(0, 7))
     }
-    return colors[category as keyof typeof colors] || "bg-gray-100 text-gray-800"
+    return Array.from(set).sort().reverse()
+  }, [transactions])
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date()
+    const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+    return availableMonths.includes(current)
+      ? current
+      : availableMonths[0] || current
+  })
+
+  // ── Transactions for selected month ────────────────────────
+  const monthTxs = useMemo(
+    () => transactions.filter((tx) => tx.date.startsWith(selectedMonth)),
+    [transactions, selectedMonth]
+  )
+
+  // ── Previous month key ─────────────────────────────────────
+  const prevMonthKey = useMemo(() => {
+    const [y, m] = selectedMonth.split("-").map(Number)
+    const d = new Date(y, m - 2, 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+  }, [selectedMonth])
+
+  const prevMonthTxs = useMemo(
+    () => transactions.filter((tx) => tx.date.startsWith(prevMonthKey)),
+    [transactions, prevMonthKey]
+  )
+
+  // ── Summary calculations ───────────────────────────────────
+  const summary = useMemo(() => {
+    const income = monthTxs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0)
+    const expenses = monthTxs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0)
+    const net = income - expenses
+
+    const prevExpenses = prevMonthTxs
+      .filter((t) => t.type === "expense")
+      .reduce((s, t) => s + t.amount, 0)
+
+    const momChange = prevExpenses > 0 ? ((expenses - prevExpenses) / prevExpenses) * 100 : null
+
+    // Days in selected month
+    const [y, m] = selectedMonth.split("-").map(Number)
+    const daysInMonth = new Date(y, m, 0).getDate()
+    const dailyAvg = daysInMonth > 0 ? expenses / daysInMonth : 0
+
+    // Top spending category
+    const catMap = new Map<string, number>()
+    for (const tx of monthTxs) {
+      if (tx.type !== "expense") continue
+      catMap.set(tx.category, (catMap.get(tx.category) || 0) + tx.amount)
+    }
+    let topCat = { name: "N/A", amount: 0, icon: "Circle" }
+    if (catMap.size > 0) {
+      const [topId, topAmt] = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1])[0]
+      const cat = categories.find((c) => c.id === topId)
+      topCat = { name: cat?.name || topId, amount: topAmt, icon: cat?.icon || "Circle" }
+    }
+
+    return {
+      income,
+      expenses,
+      net,
+      txCount: monthTxs.length,
+      dailyAvg,
+      topCat,
+      momChange,
+    }
+  }, [monthTxs, prevMonthTxs, selectedMonth, categories])
+
+  // ── Category breakdown ─────────────────────────────────────
+  const categoryBreakdown = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const tx of monthTxs) {
+      if (tx.type !== "expense") continue
+      map.set(tx.category, (map.get(tx.category) || 0) + tx.amount)
+    }
+    const total = Array.from(map.values()).reduce((s, v) => s + v, 0)
+    return Array.from(map.entries())
+      .map(([catId, amount]) => {
+        const cat = categories.find((c) => c.id === catId)
+        return {
+          catId,
+          name: cat?.name || catId,
+          icon: cat?.icon || "Circle",
+          amount,
+          percentage: total > 0 ? (amount / total) * 100 : 0,
+        }
+      })
+      .sort((a, b) => b.amount - a.amount)
+  }, [monthTxs, categories])
+
+  // ── Recent transactions ────────────────────────────────────
+  const recentTxs = useMemo(() => {
+    const sorted = [...monthTxs].sort((a, b) => b.date.localeCompare(a.date))
+    return sorted.slice(0, 10)
+  }, [monthTxs])
+
+  const remainingCount = monthTxs.length - recentTxs.length
+
+  // ── Budget compliance ──────────────────────────────────────
+  const budgetCompliance = useMemo(() => {
+    return budgets
+      .filter((b) => b.period === "monthly")
+      .map((budget) => {
+        const spent = monthTxs
+          .filter((tx) => tx.type === "expense" && tx.category === budget.categoryId)
+          .reduce((s, t) => s + t.amount, 0)
+        const cat = categories.find((c) => c.id === budget.categoryId)
+        const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0
+        return {
+          id: budget.id,
+          categoryName: cat?.name || budget.categoryId,
+          icon: cat?.icon || "Circle",
+          budgetAmount: budget.amount,
+          spent,
+          percentage,
+          withinLimit: spent <= budget.amount,
+        }
+      })
+  }, [budgets, monthTxs, categories])
+
+  // ── Format month label ─────────────────────────────────────
+  function formatMonthLabel(key: string) {
+    const [y, m] = key.split("-").map(Number)
+    return new Date(y, m - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+  }
+
+  if (availableMonths.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <p className="text-muted-foreground">No transaction data yet. Add transactions to generate a report.</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
     <div className="space-y-6">
       {/* Month Selector */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Monthly Report
-          </CardTitle>
-          <CardDescription>Detailed analysis of your monthly spending</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <label htmlFor="month-select" className="text-sm font-medium">
-              Select Month:
-            </label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableMonths.map((month) => (
-                  <SelectItem key={month} value={month}>
-                    {formatMonth(month)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">Monthly Report</h2>
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {availableMonths.map((m) => (
+              <SelectItem key={m} value={m}>
+                {formatMonthLabel(m)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* Summary Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Spent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(totalAmount, defaultCurrency)}</div>
-            {prevMonthTotal > 0 && (
-              <div
-                className={`flex items-center gap-1 text-sm mt-1 ${
-                  monthlyChange >= 0 ? "text-red-600" : "text-green-600"
-                }`}
-              >
-                {monthlyChange >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                {Math.abs(monthlyChangePercent).toFixed(1)}% vs last month
-              </div>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Total Income</p>
+            <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
+              {formatCurrency(summary.income, currency)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Total Expenses</p>
+            <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">
+              {formatCurrency(summary.expenses, currency)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Net Savings</p>
+            <p
+              className={`mt-1 text-2xl font-bold ${
+                summary.net >= 0
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {formatCurrency(summary.net, currency)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Transactions</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">{summary.txCount}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Daily Avg Spending</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">
+              {formatCurrency(summary.dailyAvg, currency)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Top Category</p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <CategoryIcon name={summary.topCat.icon} className="h-5 w-5 text-muted-foreground" />
+              <span className="text-lg font-bold text-foreground">{summary.topCat.name}</span>
+            </div>
+            {summary.topCat.amount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(summary.topCat.amount, currency)}
+              </p>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Transactions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{transactionCount}</div>
-            <div className="text-sm text-gray-500 mt-1">Total expenses recorded</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Daily Average</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(averagePerDay, defaultCurrency)}</div>
-            <div className="text-sm text-gray-500 mt-1">Average per day</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Top Category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-bold text-purple-600">{sortedCategories[0]?.[0] || "None"}</div>
-            <div className="text-sm text-gray-500 mt-1">
-              {formatCurrency(sortedCategories[0]?.[1] || 0, defaultCurrency)}
-            </div>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Month-over-Month</p>
+            {summary.momChange === null ? (
+              <p className="mt-1 text-lg font-bold text-muted-foreground">No prior data</p>
+            ) : (
+              <p
+                className={`mt-1 text-2xl font-bold ${
+                  summary.momChange > 0
+                    ? "text-red-600 dark:text-red-400"
+                    : summary.momChange < 0
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {summary.momChange > 0 ? "\u2191" : summary.momChange < 0 ? "\u2193" : ""}
+                {Math.abs(summary.momChange).toFixed(1)}%
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Category Breakdown */}
       <Card>
-        <CardHeader>
-          <CardTitle>Category Breakdown</CardTitle>
-          <CardDescription>Spending distribution for {formatMonth(selectedMonth)}</CardDescription>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Category Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          {sortedCategories.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No expenses recorded for this month</p>
-            </div>
+          {categoryBreakdown.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No expenses this month</p>
           ) : (
-            <div className="space-y-4">
-              {sortedCategories.map(([category, amount]) => {
-                const percentage = ((amount / totalAmount) * 100).toFixed(1)
-                return (
-                  <div key={category} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Badge className={getCategoryColor(category)}>{category}</Badge>
-                      <div className="text-right">
-                        <div className="font-bold">{formatCurrency(amount, defaultCurrency)}</div>
-                        <div className="text-sm text-gray-500">{percentage}%</div>
-                      </div>
+            <div className="space-y-3">
+              {categoryBreakdown.map((cat) => (
+                <div key={cat.catId} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <CategoryIcon name={cat.icon} className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-foreground">{cat.name}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${percentage}%` }}
-                      />
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground">{cat.percentage.toFixed(1)}%</span>
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(cat.amount, currency)}
+                      </span>
                     </div>
                   </div>
-                )
-              })}
+                  <Progress value={cat.percentage} className="h-2" />
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Recent Transactions */}
+      {/* Income vs Expense Summary */}
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
-          <CardDescription>Latest expenses for {formatMonth(selectedMonth)}</CardDescription>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Income vs Expense</CardTitle>
         </CardHeader>
         <CardContent>
-          {monthExpenses.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No transactions for this month</p>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Income</span>
+                <span className="font-medium text-green-600 dark:text-green-400">
+                  {formatCurrency(summary.income, currency)}
+                </span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-muted">
+                <div
+                  className="h-3 rounded-full bg-green-500"
+                  style={{
+                    width: `${
+                      summary.income + summary.expenses > 0
+                        ? (summary.income / (summary.income + summary.expenses)) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
             </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Expenses</span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  {formatCurrency(summary.expenses, currency)}
+                </span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-muted">
+                <div
+                  className="h-3 rounded-full bg-red-500"
+                  style={{
+                    width: `${
+                      summary.income + summary.expenses > 0
+                        ? (summary.expenses / (summary.income + summary.expenses)) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Transactions */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Recent Transactions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentTxs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No transactions this month</p>
           ) : (
-            <div className="space-y-3">
-              {monthExpenses
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                .slice(0, 10)
-                .map((expense) => (
-                  <div key={expense.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className={getCategoryColor(expense.category)}>{expense.category}</Badge>
-                        <span className="text-sm text-gray-500">{new Date(expense.date).toLocaleDateString()}</span>
+            <div className="space-y-2">
+              {recentTxs.map((tx) => {
+                const cat = categories.find((c) => c.id === tx.category)
+                return (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <CategoryIcon
+                        name={cat?.icon || "Circle"}
+                        className="h-4 w-4 text-muted-foreground"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{tx.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {cat?.name || tx.category} &middot; {tx.date}
+                        </p>
                       </div>
-                      <p className="font-medium">{expense.description}</p>
                     </div>
-                    <div className="text-lg font-bold text-red-600">
-                      {formatCurrency(expense.amount, defaultCurrency)}
-                    </div>
+                    <span
+                      className={`text-sm font-medium ${
+                        tx.type === "income"
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-red-600 dark:text-red-400"
+                      }`}
+                    >
+                      {tx.type === "income" ? "+" : "-"}
+                      {formatCurrency(tx.amount, currency)}
+                    </span>
                   </div>
-                ))}
-              {monthExpenses.length > 10 && (
-                <div className="text-center text-sm text-gray-500 pt-2">
-                  And {monthExpenses.length - 10} more transactions...
-                </div>
+                )
+              })}
+              {remainingCount > 0 && (
+                <p className="pt-1 text-center text-xs text-muted-foreground">
+                  and {remainingCount} more transaction{remainingCount > 1 ? "s" : ""}
+                </p>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Budget Compliance */}
+      {budgetCompliance.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Budget Compliance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {budgetCompliance.map((b) => (
+                <div key={b.id} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <CategoryIcon name={b.icon} className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-foreground">{b.categoryName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-medium ${
+                          b.withinLimit
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {b.withinLimit ? "Within budget" : "Over budget"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatCurrency(b.spent, currency)} / {formatCurrency(b.budgetAmount, currency)}
+                      </span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={Math.min(b.percentage, 100)}
+                    className={`h-2 ${!b.withinLimit ? "[&>div]:bg-red-500" : ""}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

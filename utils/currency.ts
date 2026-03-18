@@ -1,4 +1,4 @@
-import type { Currency } from "@/components/currency-setup"
+import type { Currency } from "@/lib/types"
 
 export function formatCurrency(amount: number, currency?: Currency): string {
   // Provide default currency if none provided
