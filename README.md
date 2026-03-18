@@ -4,7 +4,7 @@ A full-featured personal finance tracker built with Next.js 15, React 19, and Ty
 
 ## Live Demo
 
-[expense-tracker-alpha-dun.vercel.app](https://expense-tracker-alpha-dun.vercel.app)
+[expense-tracker-alpha-dun.vercel.app](https://daily--expense-tracker.vercel.app/)
 
 ## Features
 
