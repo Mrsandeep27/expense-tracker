@@ -25,6 +25,7 @@ import {
   Plus,
   Menu,
   X,
+  FileUp,
 } from "lucide-react"
 import type { Transaction } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -43,6 +44,7 @@ const MonthlyReport = lazy(() => import("@/components/monthly-report").then(m =>
 const YearReview = lazy(() => import("@/components/year-review").then(m => ({ default: m.YearReview })))
 const CategoryManager = lazy(() => import("@/components/category-manager").then(m => ({ default: m.CategoryManager })))
 const SettingsPanel = lazy(() => import("@/components/settings-panel").then(m => ({ default: m.SettingsPanel })))
+const BankImportLazy = lazy(() => import("@/components/bank-import").then(m => ({ default: m.BankImport })))
 
 // ─── Loading skeleton for views ─────────────────────────────
 function ViewSkeleton() {
@@ -79,6 +81,7 @@ function ViewSkeleton() {
 type View =
   | "dashboard"
   | "transactions"
+  | "bank-import"
   | "budgets"
   | "accounts"
   | "goals"
@@ -99,6 +102,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, group: "Overview" },
   { id: "transactions", label: "Transactions", icon: <ArrowLeftRight className="h-4 w-4" />, group: "Overview" },
+  { id: "bank-import", label: "Import Statement", icon: <FileUp className="h-4 w-4" />, group: "Overview" },
   { id: "budgets", label: "Budgets", icon: <PieChart className="h-4 w-4" />, group: "Manage" },
   { id: "accounts", label: "Accounts", icon: <Wallet className="h-4 w-4" />, group: "Manage" },
   { id: "goals", label: "Savings Goals", icon: <Target className="h-4 w-4" />, group: "Manage" },
@@ -177,6 +181,8 @@ export function MainApp() {
             <TransactionList onEdit={handleEdit} />
           </div>
         )
+      case "bank-import":
+        return <BankImportLazy open={true} onOpenChange={(open) => { if (!open) setCurrentView("transactions") }} />
       case "budgets":
         return <BudgetManager />
       case "accounts":
