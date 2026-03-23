@@ -4,7 +4,7 @@ A full-featured personal finance tracker built with Next.js 15, React 19, and Ty
 
 ## Live Demo
 
-[expense-tracker-alpha-dun.vercel.app](https://daily--expense-tracker.vercel.app/)
+[daily--expense-tracker.vercel.app](https://daily--expense-tracker.vercel.app)
 
 ## Features
 
@@ -51,35 +51,9 @@ A full-featured personal finance tracker built with Next.js 15, React 19, and Ty
 | Language | TypeScript |
 | Deployment | [Vercel](https://vercel.com/) |
 
-## Getting Started
+## Try It
 
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-
-### Installation
-
-```bash
-git clone https://github.com/Mrsandeep27/expense-tracker.git
-cd expense-tracker
-npm install
-```
-
-### Development
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Production Build
-
-```bash
-npm run build
-npm start
-```
+Check out the [Live Demo](https://daily--expense-tracker.vercel.app) — no installation needed.
 
 ## Project Structure
 
@@ -108,24 +82,15 @@ components/
   onboarding.tsx        # 5-step new user setup
   data-manager.tsx      # Import/export functionality
   split-expense.tsx     # Split costs with others
-  error-boundary.tsx    # Error catching wrapper
-  category-icon.tsx     # Dynamic Lucide icon renderer
-  theme-provider.tsx    # Dark mode provider
-  theme-toggle.tsx      # Theme switch button
   ui/                   # shadcn/ui component library
 
 lib/
   types.ts              # All Zod schemas and TypeScript types
   constants.ts          # Categories, accounts, currencies, colors
   store.ts              # localStorage operations with validation
-  utils.ts              # Tailwind class merge utility
 
 utils/
   currency.ts           # Currency formatting (INR lakhs/crores support)
-
-hooks/
-  use-mobile.tsx        # Responsive breakpoint detection
-  use-toast.ts          # Toast notification hook
 
 public/
   manifest.json         # PWA manifest
